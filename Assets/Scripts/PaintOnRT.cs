@@ -35,6 +35,7 @@ public class PaintOnRT : MonoBehaviour
     private Mesh _quad;
     private Matrix4x4 _matrixProj;
     private Material _material;
+    private int _instanceCountPerBatch = 200; // 每一批次的实例数量上限（太多有些设备会有异常）
 
     void Start()
     {
