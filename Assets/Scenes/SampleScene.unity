@@ -665,9 +665,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   maskImg: {fileID: 1267921555}
   brushTex: {fileID: 0}
-  offset: {x: 300, y: 300}
+  offsetFrom: {x: 20, y: 20}
+  offsetTo: {x: 200, y: 200}
   brushSize: 10
-  precision: 0.1
+  precision: 1
 --- !u!1 &1267921553
 GameObject:
   m_ObjectHideFlags: 0

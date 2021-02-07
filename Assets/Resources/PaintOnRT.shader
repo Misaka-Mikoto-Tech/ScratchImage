@@ -6,7 +6,15 @@ Shader "Unlit/PaintOnRT"
     }
     SubShader
     {
-        Tags { "RenderType"="Opaque" }
+        Tags
+        {
+            "Queue"="Transparent"
+            "RenderType"="Transparent"
+        }
+        ZWrite Off
+        ZTest Off
+        Blend SrcAlpha OneMinusSrcAlpha
+
         LOD 100
 
         Pass
@@ -14,11 +22,13 @@ Shader "Unlit/PaintOnRT"
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile_instancing
 
             #include "UnityCG.cginc"
 
             struct appdata
             {
+                UNITY_VERTEX_INPUT_INSTANCE_ID
                 float4 vertex : POSITION;
                 float2 uv : TEXCOORD0;
             };
@@ -35,6 +45,7 @@ Shader "Unlit/PaintOnRT"
             v2f vert (appdata v)
             {
                 v2f o;
+                UNITY_SETUP_INSTANCE_ID(v);
                 o.vertex = UnityObjectToClipPos(v.vertex);
                 o.uv = TRANSFORM_TEX(v.uv, _MainTex);
                 return o;

@@ -30,12 +30,12 @@ public class PaintOnRT : MonoBehaviour
     private bool _isDirty;
     private Vector2 _beginPos;
     private Vector2 _endPos;
-    private List<Vector2> _lstDrawPts;
     
     private Mesh _quad;
     private Matrix4x4 _matrixProj;
     private Material _material;
     private int _instanceCountPerBatch = 200; // 每一批次的实例数量上限（太多有些设备会有异常）
+    private Matrix4x4[] _arrMatrixs;
 
     void Start()
     {
@@ -45,7 +45,7 @@ public class PaintOnRT : MonoBehaviour
             return;
         }
 
-        _lstDrawPts = new List<Vector2>();
+        _arrMatrixs = new Matrix4x4[_instanceCountPerBatch];
         _rt = new RenderTexture(600, 600, 24, RenderTextureFormat.ARGB32,0); // TODO 改成与 Image同样尺寸
         _rt.antiAliasing = 2;
         maskImg.texture = _rt;
@@ -53,15 +53,18 @@ public class PaintOnRT : MonoBehaviour
         Init();
 
         _cb = new CommandBuffer() { name = "paint cb" };
-        ResetRT();
+        ResetCB(true);
         _isDirty = false;
     }
 
-    private void ResetRT()
+    private void ResetCB(bool clearRT)
     {
         _cb.Clear();
         _cb.SetRenderTarget(_rt);
-        _cb.ClearRenderTarget(true, true, Color.black);
+
+        if(clearRT)
+            _cb.ClearRenderTarget(true, true, Color.green);
+        
         _cb.SetViewProjectionMatrices(Matrix4x4.identity, _matrixProj);
 
         if(brushTex == null)
@@ -83,35 +86,39 @@ public class PaintOnRT : MonoBehaviour
         if (!_isDirty)
             return false;
 
-        _lstDrawPts.Clear();
-
         {// test
             _beginPos = offsetFrom;
             _endPos = offsetTo;
         }
+
+        ResetCB(true);
 
         Vector2 fromToVec = _endPos - _beginPos;
         Vector2 dir = fromToVec.normalized;
         float len = fromToVec.magnitude;
 
         float offset = 0;
+        int instCount = 0;
         while(offset <= len)
         {
+            if (instCount >= _instanceCountPerBatch)
+            {
+                _cb.DrawMeshInstanced(_quad, 0, _material, 0, _arrMatrixs, instCount);
+                instCount = 0;
+            }
+
             Vector2 tmpPt = _beginPos + dir * offset;
             tmpPt -= Vector2.one * brushSize * 0.5f; // 将笔刷居中到绘制点
-            _lstDrawPts.Add(tmpPt);
             offset += precision;
+
+            _arrMatrixs[instCount++] = Matrix4x4.TRS(new Vector3(tmpPt.x, tmpPt.y, 0), Quaternion.identity, Vector3.one * brushSize);
         }
 
-        _cb.Clear();
-        // Instancing Draw Points
-
-        ResetRT();
-        foreach(Vector2 pt in _lstDrawPts)
+        if(instCount > 0)
         {
-            Matrix4x4 matrix = Matrix4x4.TRS(new Vector3(pt.x, pt.y, 0), Quaternion.identity, Vector3.one * brushSize);
-            _cb.DrawMesh(_quad, matrix, _material);
+            _cb.DrawMeshInstanced(_quad, 0, _material, 0, _arrMatrixs, instCount);
         }
+        // Instancing Draw Points
 
         _isDirty = false;
         return true;
@@ -143,5 +150,6 @@ public class PaintOnRT : MonoBehaviour
 
         Shader shader = Resources.Load<Shader>("PaintOnRT");
         _material = new Material(shader);
+        _material.enableInstancing = true;
     }
 }
