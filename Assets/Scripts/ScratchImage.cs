@@ -4,9 +4,15 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.UI;
 
-public class PaintOnRT : MonoBehaviour
+/// <summary>
+/// 可以刮开的图像
+/// </summary>
+public class ScratchImage : MonoBehaviour
 {
-    public RawImage maskImg;
+    /// <summary>
+    /// 蒙版贴图
+    /// </summary>
+    public Image maskImage;
     /// <summary>
     /// 笔刷贴图
     /// </summary>
@@ -24,6 +30,11 @@ public class PaintOnRT : MonoBehaviour
     /// </summary>
     [Range(1f, 20f)]
     public float precision = 5f;
+    /// <summary>
+    /// 笔刷不透明度
+    /// </summary>
+    [Range(0f, 1f)]
+    public float brushAlpha = 1f;
 
     private RenderTexture _rt;
     private CommandBuffer _cb;
@@ -33,28 +44,31 @@ public class PaintOnRT : MonoBehaviour
     
     private Mesh _quad;
     private Matrix4x4 _matrixProj;
-    private Material _material;
+    private Material _matPaint;
     private int _instanceCountPerBatch = 200; // 每一批次的实例数量上限（太多有些设备会有异常）
-    private Matrix4x4[] _arrMatrixs;
+    private Matrix4x4[] _arrInstancingMatrixs;
+
+    private int _propIDMainTex;
+    private int _propIDBrushAlpha;
 
     void Start()
     {
-        if(maskImg == null)
-        {
-            enabled = false;
-            return;
-        }
-
-        _arrMatrixs = new Matrix4x4[_instanceCountPerBatch];
-        _rt = new RenderTexture(600, 600, 24, RenderTextureFormat.ARGB32,0); // TODO 改成与 Image同样尺寸
-        _rt.antiAliasing = 2;
-        maskImg.texture = _rt;
-
         Init();
 
-        _cb = new CommandBuffer() { name = "paint cb" };
         ResetCB(true);
         _isDirty = false;
+    }
+
+    private void OnDestroy()
+    {
+        if(_rt != null)
+            Destroy(_rt);
+
+        if(_quad != null)
+            Destroy(_quad);
+
+        if (_cb != null)
+            _cb.Dispose();
     }
 
     private void ResetCB(bool clearRT)
@@ -63,12 +77,9 @@ public class PaintOnRT : MonoBehaviour
         _cb.SetRenderTarget(_rt);
 
         if(clearRT)
-            _cb.ClearRenderTarget(true, true, Color.green);
+            _cb.ClearRenderTarget(true, true, Color.clear);
         
         _cb.SetViewProjectionMatrices(Matrix4x4.identity, _matrixProj);
-
-        if(brushTex == null)
-            brushTex = Texture2D.whiteTexture;
     }
 
 
@@ -93,6 +104,9 @@ public class PaintOnRT : MonoBehaviour
 
         ResetCB(true);
 
+        _matPaint.SetTexture(_propIDMainTex, brushTex != null ? brushTex : Texture2D.whiteTexture);
+        _matPaint.SetFloat(_propIDBrushAlpha, brushAlpha);
+
         Vector2 fromToVec = _endPos - _beginPos;
         Vector2 dir = fromToVec.normalized;
         float len = fromToVec.magnitude;
@@ -103,7 +117,7 @@ public class PaintOnRT : MonoBehaviour
         {
             if (instCount >= _instanceCountPerBatch)
             {
-                _cb.DrawMeshInstanced(_quad, 0, _material, 0, _arrMatrixs, instCount);
+                _cb.DrawMeshInstanced(_quad, 0, _matPaint, 0, _arrInstancingMatrixs, instCount);
                 instCount = 0;
             }
 
@@ -111,14 +125,13 @@ public class PaintOnRT : MonoBehaviour
             tmpPt -= Vector2.one * brushSize * 0.5f; // 将笔刷居中到绘制点
             offset += precision;
 
-            _arrMatrixs[instCount++] = Matrix4x4.TRS(new Vector3(tmpPt.x, tmpPt.y, 0), Quaternion.identity, Vector3.one * brushSize);
+            _arrInstancingMatrixs[instCount++] = Matrix4x4.TRS(new Vector3(tmpPt.x, tmpPt.y, 0), Quaternion.identity, Vector3.one * brushSize);
         }
 
         if(instCount > 0)
         {
-            _cb.DrawMeshInstanced(_quad, 0, _material, 0, _arrMatrixs, instCount);
+            _cb.DrawMeshInstanced(_quad, 0, _matPaint, 0, _arrInstancingMatrixs, instCount);
         }
-        // Instancing Draw Points
 
         _isDirty = false;
         return true;
@@ -146,10 +159,26 @@ public class PaintOnRT : MonoBehaviour
         _quad.SetIndices(new int[] { 0, 1, 2, 3, 2, 1 }, MeshTopology.Triangles, 0, false);
         _quad.UploadMeshData(true);
 
+
+        Vector2 maskSize = maskImage.rectTransform.rect.size;
+        Debug.LogFormat("mask image size:{0}*{1}", maskSize.x, maskSize.y);
+
+        _rt = new RenderTexture((int)maskSize.x, (int)maskSize.y, 0, RenderTextureFormat.R8, 0);
+        _rt.antiAliasing = 2;
+
+        _arrInstancingMatrixs = new Matrix4x4[_instanceCountPerBatch];
         _matrixProj = Matrix4x4.Ortho(0, _rt.width, 0, _rt.height, -1f, 1f);
 
-        Shader shader = Resources.Load<Shader>("PaintOnRT");
-        _material = new Material(shader);
-        _material.enableInstancing = true;
+        _propIDMainTex = Shader.PropertyToID("_MainTex");
+        _propIDBrushAlpha = Shader.PropertyToID("_BrushAlpha");
+
+        Shader paintShader = Resources.Load<Shader>("Shaders/PaintOnRT");
+        _matPaint = new Material(paintShader);
+        _matPaint.enableInstancing = true;
+
+        Material maskMat = maskImage.material;
+        maskMat.SetTexture("_AlphaTex", _rt);
+
+        _cb = new CommandBuffer() { name = "PaintOncb" };
     }
 }

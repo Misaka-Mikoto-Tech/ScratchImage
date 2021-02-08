@@ -3,6 +3,7 @@ Shader "Unlit/PaintOnRT"
     Properties
     {
         _MainTex ("Texture", 2D) = "white" {}
+        _BrushAlpha("BrushAlpha", Float) = 1
     }
     SubShader
     {
@@ -13,7 +14,7 @@ Shader "Unlit/PaintOnRT"
         }
         ZWrite Off
         ZTest Off
-        Blend SrcAlpha OneMinusSrcAlpha
+        Blend SrcAlpha One
 
         LOD 100
 
@@ -41,6 +42,7 @@ Shader "Unlit/PaintOnRT"
 
             sampler2D _MainTex;
             float4 _MainTex_ST;
+            float _BrushAlpha;
 
             v2f vert (appdata v)
             {
@@ -53,8 +55,9 @@ Shader "Unlit/PaintOnRT"
 
             fixed4 frag (v2f i) : SV_Target
             {
-                fixed4 col = tex2D(_MainTex, i.uv);
-                return col;
+                fixed alpha = tex2D(_MainTex, i.uv).a;    
+                alpha *= _BrushAlpha;
+                return fixed4(alpha, alpha, alpha, alpha);
             }
             ENDCG
         }
