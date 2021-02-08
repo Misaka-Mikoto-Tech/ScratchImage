@@ -29,12 +29,18 @@ public class ScratchImage : MonoBehaviour
     /// <summary>
     /// 笔刷尺寸
     /// </summary>
+    [Range(1f, 50f)]
     public float brushSize = 10f;
     /// <summary>
-    /// 笔刷精度
+    /// 笔刷绘制精度(值过大会变成点链，过小则有性能压力)
     /// </summary>
     [Range(1f, 20f)]
     public float precision = 5f;
+    /// <summary>
+    /// 笔刷移动检测阈值
+    /// </summary>
+    [Range(1f, 10f)]
+    public float brushMoveThreshhold = 2f;
     /// <summary>
     /// 笔刷不透明度
     /// </summary>
@@ -45,21 +51,21 @@ public class ScratchImage : MonoBehaviour
     /// </summary>
     public Material paintMaterial;
 
-    private RenderTexture _rt;
-    private CommandBuffer _cb;
-    private bool _isDirty;
-    private Vector2 _beginPos;
-    private Vector2 _endPos;
+    private RenderTexture   _rt;
+    private CommandBuffer   _cb;
+    private bool            _isDirty;
+    private Vector2         _beginPos;
+    private Vector2         _endPos;
     
-    private Mesh _quad;
-    private Matrix4x4 _matrixProj;
-    private int _instanceCountPerBatch = 200; // 每一批次的实例数量上限（太多有些设备会有异常）
-    private Matrix4x4[] _arrInstancingMatrixs;
+    private Mesh            _quad;
+    private Matrix4x4       _matrixProj;
+    private int             _instanceCountPerBatch = 200; // 每一批次的实例数量上限（太多有些设备会有异常）
+    private Matrix4x4[]     _arrInstancingMatrixs;
 
-    private int _propIDMainTex;
-    private int _propIDBrushAlpha;
-    private Vector2 _lastPoint;
-    private Vector2 _maskSize;
+    private int             _propIDMainTex;
+    private int             _propIDBrushAlpha;
+    private Vector2         _lastPoint;
+    private Vector2         _maskSize;
 
     /// <summary>
     /// 重置蒙版
@@ -117,13 +123,11 @@ public class ScratchImage : MonoBehaviour
         switch (mouseStatus)
         {
             case 1:
-                {
-                    _beginPos = localPt;
-                    _lastPoint = localPt;
-                }
+                _beginPos = localPt;
+                _lastPoint = localPt;
                 break;
             case 2:
-                if (Vector2.Distance(localPt, _lastPoint) > 2)
+                if (Vector2.Distance(localPt, _lastPoint) > brushMoveThreshhold)
                 {
                     _endPos = localPt;
                     _lastPoint = localPt;
