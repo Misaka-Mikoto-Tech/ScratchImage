@@ -761,6 +761,7 @@ MonoBehaviour:
   brushTex: {fileID: 2800000, guid: ab8ff58df700ebc4cb74c65cebd423ec, type: 3}
   brushSize: 50
   precision: 10
+  brushMoveThreshhold: 2
   brushAlpha: 1
   paintMaterial: {fileID: 2100000, guid: fb0b643d13159e74b84d88fd356de9ba, type: 2}
 --- !u!1 &1778863866

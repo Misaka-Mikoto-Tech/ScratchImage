@@ -29,8 +29,8 @@ public class ScratchImage : MonoBehaviour
     /// <summary>
     /// 笔刷尺寸
     /// </summary>
-    [Range(1f, 50f)]
-    public float brushSize = 10f;
+    [Range(1f, 200f)]
+    public float brushSize = 50f;
     /// <summary>
     /// 笔刷绘制精度(值过大会变成点链，过小则有性能压力)
     /// </summary>
