@@ -32,15 +32,16 @@ public class ScratchImage : MonoBehaviour
     [Range(1f, 200f)]
     public float brushSize = 50f;
     /// <summary>
-    /// 笔刷绘制精度(值过大会变成点链，过小则有性能压力)
+    /// 绘制步进精度(值过大会变成点链，过小则有性能压力)
+    /// TODO 改成根据brushSize自动计算
     /// </summary>
     [Range(1f, 20f)]
-    public float precision = 5f;
+    public float paintStep = 5f;
     /// <summary>
     /// 笔刷移动检测阈值
     /// </summary>
     [Range(1f, 10f)]
-    public float brushMoveThreshhold = 2f;
+    public float moveThreshhold = 2f;
     /// <summary>
     /// 笔刷不透明度
     /// </summary>
@@ -97,49 +98,7 @@ public class ScratchImage : MonoBehaviour
 
     private void Update()
     {
-        if (uiCamera == null)
-            return;
-
-        int mouseStatus = 0;// 0：none, 1:down, 2:hold, 3:up
-
-        if(Input.GetMouseButtonDown(0)) // 按下鼠标
-            mouseStatus = 1;
-        else if (Input.GetMouseButton(0)) // 移动鼠标或者处于按下状态
-            mouseStatus = 2;
-        else if(Input.GetMouseButtonUp(0)) // 释放鼠标
-            mouseStatus = 3;
-
-        if (mouseStatus == 0)
-            return;
-
-        Vector2 localPt = Vector2.zero;
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(transform as RectTransform, Input.mousePosition, uiCamera, out localPt);
-
-        //Debug.Log($"pt:{localPt}, status:{mouseStatus}");
-
-        if (localPt.x < 0 || localPt.y < 0 || localPt.y >= _maskSize.x || localPt.y >= _maskSize.y)
-            return;
-
-        switch (mouseStatus)
-        {
-            case 1:
-                _beginPos = localPt;
-                _lastPoint = localPt;
-                break;
-            case 2:
-                if (Vector2.Distance(localPt, _lastPoint) > brushMoveThreshhold)
-                {
-                    _endPos = localPt;
-                    _lastPoint = localPt;
-                    _isDirty = true;
-                }
-                break;
-            case 3:
-                _endPos = localPt;
-                _lastPoint = localPt;
-                _isDirty = true;
-                break;
-        }
+        CheckInput();
     }
 
     void LateUpdate()
@@ -178,7 +137,7 @@ public class ScratchImage : MonoBehaviour
 
             Vector2 tmpPt = _beginPos + dir * offset;
             tmpPt -= Vector2.one * brushSize * 0.5f; // 将笔刷居中到绘制点
-            offset += precision;
+            offset += paintStep;
 
             _arrInstancingMatrixs[instCount++] = Matrix4x4.TRS(new Vector3(tmpPt.x, tmpPt.y, 0), Quaternion.identity, Vector3.one * brushSize);
         }
@@ -249,5 +208,52 @@ public class ScratchImage : MonoBehaviour
         }
 
         _cb.SetViewProjectionMatrices(Matrix4x4.identity, _matrixProj);
+    }
+
+    private void CheckInput()
+    {
+        if (uiCamera == null)
+            return;
+
+        int mouseStatus = 0;// 0：none, 1:down, 2:hold, 3:up
+
+        if (Input.GetMouseButtonDown(0)) // 按下鼠标
+            mouseStatus = 1;
+        else if (Input.GetMouseButton(0)) // 移动鼠标或者处于按下状态
+            mouseStatus = 2;
+        else if (Input.GetMouseButtonUp(0)) // 释放鼠标
+            mouseStatus = 3;
+
+        if (mouseStatus == 0)
+            return;
+
+        Vector2 localPt = Vector2.zero;
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(transform as RectTransform, Input.mousePosition, uiCamera, out localPt);
+
+        //Debug.Log($"pt:{localPt}, status:{mouseStatus}");
+
+        if (localPt.x < 0 || localPt.y < 0 || localPt.y >= _maskSize.x || localPt.y >= _maskSize.y)
+            return;
+
+        switch (mouseStatus)
+        {
+            case 1:
+                _beginPos = localPt;
+                _lastPoint = localPt;
+                break;
+            case 2:
+                if (Vector2.Distance(localPt, _lastPoint) > moveThreshhold)
+                {
+                    _endPos = localPt;
+                    _lastPoint = localPt;
+                    _isDirty = true;
+                }
+                break;
+            case 3:
+                _endPos = localPt;
+                _lastPoint = localPt;
+                _isDirty = true;
+                break;
+        }
     }
 }
