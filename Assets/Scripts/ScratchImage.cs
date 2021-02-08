@@ -1,3 +1,9 @@
+/*
+ * Author:Misaka-Mikoto
+ * Date: 2020-02-08
+ * Url:https://github.com/Misaka-Mikoto-Tech/ScratchImage
+ */
+
 using System;
 using System.Collections;
 using System.Collections.Generic;
