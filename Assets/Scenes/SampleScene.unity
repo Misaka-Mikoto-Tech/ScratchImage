@@ -667,3 +667,4 @@ MonoBehaviour:
   brushSize: 50
   precision: 10
   brushAlpha: 1
+  paintMaterial: {fileID: 2100000, guid: fb0b643d13159e74b84d88fd356de9ba, type: 2}

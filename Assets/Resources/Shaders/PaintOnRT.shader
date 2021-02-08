@@ -2,6 +2,7 @@ Shader "Unlit/PaintOnRT"
 {
     Properties
     {
+        [PerRendererData][NoScaleOffset]
         _MainTex ("Texture", 2D) = "white" {}
         _BrushAlpha("BrushAlpha", Float) = 1
     }
@@ -41,7 +42,6 @@ Shader "Unlit/PaintOnRT"
             };
 
             sampler2D _MainTex;
-            float4 _MainTex_ST;
             float _BrushAlpha;
 
             v2f vert (appdata v)
@@ -49,7 +49,7 @@ Shader "Unlit/PaintOnRT"
                 v2f o;
                 UNITY_SETUP_INSTANCE_ID(v);
                 o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+                o.uv = v.uv;
                 return o;
             }
 

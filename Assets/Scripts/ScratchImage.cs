@@ -18,9 +18,6 @@ public class ScratchImage : MonoBehaviour
     /// </summary>
     public Texture2D brushTex;
 
-    public Vector2 offsetFrom = new Vector2(20f, 20f);
-    public Vector2 offsetTo = new Vector2(200f, 200f);
-
     /// <summary>
     /// 笔刷尺寸
     /// </summary>
@@ -35,6 +32,10 @@ public class ScratchImage : MonoBehaviour
     /// </summary>
     [Range(0f, 1f)]
     public float brushAlpha = 1f;
+    /// <summary>
+    /// 绘图材质
+    /// </summary>
+    public Material paintMaterial;
 
     private RenderTexture _rt;
     private CommandBuffer _cb;
@@ -44,19 +45,33 @@ public class ScratchImage : MonoBehaviour
     
     private Mesh _quad;
     private Matrix4x4 _matrixProj;
-    private Material _matPaint;
     private int _instanceCountPerBatch = 200; // 每一批次的实例数量上限（太多有些设备会有异常）
     private Matrix4x4[] _arrInstancingMatrixs;
 
     private int _propIDMainTex;
     private int _propIDBrushAlpha;
 
+
+    /// <summary>
+    /// 重置蒙版
+    /// </summary>
+    /// <param name="clearRT"></param>
+    public void ResetMask(bool clearRT)
+    {
+        _cb.Clear();
+        _cb.SetRenderTarget(_rt);
+
+        if (clearRT)
+            _cb.ClearRenderTarget(true, true, Color.clear);
+
+        _cb.SetViewProjectionMatrices(Matrix4x4.identity, _matrixProj);
+        _isDirty = true;
+    }
+
     void Start()
     {
         Init();
-
-        ResetCB(true);
-        _isDirty = false;
+        ResetMask(true);
     }
 
     private void OnDestroy()
@@ -71,21 +86,16 @@ public class ScratchImage : MonoBehaviour
             _cb.Dispose();
     }
 
-    private void ResetCB(bool clearRT)
+    private void Update()
     {
-        _cb.Clear();
-        _cb.SetRenderTarget(_rt);
+        //if(Input.GetMouseButton(0))
+        //{
 
-        if(clearRT)
-            _cb.ClearRenderTarget(true, true, Color.clear);
-        
-        _cb.SetViewProjectionMatrices(Matrix4x4.identity, _matrixProj);
+        //}
     }
-
 
     void LateUpdate()
     {
-        _isDirty = true;
         if(BuildCommands())
         {
             Graphics.ExecuteCommandBuffer(_cb);
@@ -97,15 +107,8 @@ public class ScratchImage : MonoBehaviour
         if (!_isDirty)
             return false;
 
-        {// test
-            _beginPos = offsetFrom;
-            _endPos = offsetTo;
-        }
-
-        ResetCB(true);
-
-        _matPaint.SetTexture(_propIDMainTex, brushTex != null ? brushTex : Texture2D.whiteTexture);
-        _matPaint.SetFloat(_propIDBrushAlpha, brushAlpha);
+        paintMaterial.SetTexture(_propIDMainTex, brushTex != null ? brushTex : Texture2D.whiteTexture);
+        paintMaterial.SetFloat(_propIDBrushAlpha, brushAlpha);
 
         Vector2 fromToVec = _endPos - _beginPos;
         Vector2 dir = fromToVec.normalized;
@@ -117,7 +120,7 @@ public class ScratchImage : MonoBehaviour
         {
             if (instCount >= _instanceCountPerBatch)
             {
-                _cb.DrawMeshInstanced(_quad, 0, _matPaint, 0, _arrInstancingMatrixs, instCount);
+                _cb.DrawMeshInstanced(_quad, 0, paintMaterial, 0, _arrInstancingMatrixs, instCount);
                 instCount = 0;
             }
 
@@ -130,7 +133,7 @@ public class ScratchImage : MonoBehaviour
 
         if(instCount > 0)
         {
-            _cb.DrawMeshInstanced(_quad, 0, _matPaint, 0, _arrInstancingMatrixs, instCount);
+            _cb.DrawMeshInstanced(_quad, 0, paintMaterial, 0, _arrInstancingMatrixs, instCount);
         }
 
         _isDirty = false;
@@ -161,10 +164,11 @@ public class ScratchImage : MonoBehaviour
 
 
         Vector2 maskSize = maskImage.rectTransform.rect.size;
-        Debug.LogFormat("mask image size:{0}*{1}", maskSize.x, maskSize.y);
+        //Debug.LogFormat("mask image size:{0}*{1}", maskSize.x, maskSize.y);
 
         _rt = new RenderTexture((int)maskSize.x, (int)maskSize.y, 0, RenderTextureFormat.R8, 0);
         _rt.antiAliasing = 2;
+        _rt.autoGenerateMips = false;
 
         _arrInstancingMatrixs = new Matrix4x4[_instanceCountPerBatch];
         _matrixProj = Matrix4x4.Ortho(0, _rt.width, 0, _rt.height, -1f, 1f);
@@ -172,9 +176,7 @@ public class ScratchImage : MonoBehaviour
         _propIDMainTex = Shader.PropertyToID("_MainTex");
         _propIDBrushAlpha = Shader.PropertyToID("_BrushAlpha");
 
-        Shader paintShader = Resources.Load<Shader>("Shaders/PaintOnRT");
-        _matPaint = new Material(paintShader);
-        _matPaint.enableInstancing = true;
+        paintMaterial.enableInstancing = true;
 
         Material maskMat = maskImage.material;
         maskMat.SetTexture("_AlphaTex", _rt);
