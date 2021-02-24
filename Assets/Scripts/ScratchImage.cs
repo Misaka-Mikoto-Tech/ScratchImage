@@ -16,6 +16,12 @@ using UnityEngine.UI;
 /// </summary>
 public class ScratchImage : MonoBehaviour
 {
+    public struct StatData
+    {
+        public int      nonZeroCount; // 非0值数量
+        public float    pixelValSum; // 像素值总和
+    }
+
     public Camera uiCamera;
     /// <summary>
     /// 蒙版贴图
@@ -51,6 +57,17 @@ public class ScratchImage : MonoBehaviour
     /// 绘图材质
     /// </summary>
     public Material paintMaterial;
+    /// <summary>
+    /// 用来统计刮开像素信息的shader
+    /// </summary>
+    public ComputeShader statShader;
+
+    /// <summary>
+    /// 刮开的像素统计信息
+    /// </summary>
+    private StatData[]      _statData;
+    private ComputeBuffer   _computeBuffer;
+    private int             _statShaderKernel;
 
     private RenderTexture   _rt;
     private CommandBuffer   _cb;
@@ -68,6 +85,9 @@ public class ScratchImage : MonoBehaviour
     private Vector2         _lastPoint;
     private Vector2         _maskSize;
 
+    public Vector2 rtSize => new Vector2(_rt.width, _rt.height);
+
+
     /// <summary>
     /// 重置蒙版
     /// </summary>
@@ -76,6 +96,26 @@ public class ScratchImage : MonoBehaviour
         SetupPaintContext(true);
         Graphics.ExecuteCommandBuffer(_cb);
         _isDirty = false;
+    }
+
+    /// <summary>
+    /// 获取刮开的统计信息
+    /// </summary>
+    /// <returns></returns>
+    public StatData GetStatData()
+    {
+        if (_statShaderKernel == -1)
+        {
+            Debug.LogError("invalid compute shader");
+            return new StatData();
+        }
+
+        _statData[0] = new StatData() { nonZeroCount = 0, pixelValSum = 0 };
+        _computeBuffer.SetData(_statData);
+        statShader.Dispatch(_statShaderKernel, _rt.width / 8, _rt.height / 8, 1);
+
+        _computeBuffer.GetData(_statData);
+        return _statData[0];
     }
 
     void Start()
@@ -94,6 +134,9 @@ public class ScratchImage : MonoBehaviour
 
         if (_cb != null)
             _cb.Dispose();
+
+        if (_computeBuffer != null)
+            _computeBuffer.Release();
     }
 
     private void Update()
@@ -195,6 +238,20 @@ public class ScratchImage : MonoBehaviour
         maskMat.SetTexture("_AlphaTex", _rt);
 
         _cb = new CommandBuffer() { name = "PaintOncb" };
+
+        // setup compute shader
+        _statShaderKernel = -1;
+        if (statShader != null)
+        {
+            _computeBuffer = new ComputeBuffer(1, 8);
+            _statData = new StatData[1];
+
+            _statShaderKernel = statShader.FindKernel("CSMain");
+            statShader.SetTexture(_statShaderKernel, "inputTexture", _rt);
+            statShader.SetInt("texSize", _rt.width * _rt.height);
+            statShader.SetBuffer(_statShaderKernel, "Result", _computeBuffer);
+        }
+        
     }
 
     private void SetupPaintContext(bool clearRT)
