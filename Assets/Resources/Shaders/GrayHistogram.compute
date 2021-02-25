@@ -1,13 +1,16 @@
 ﻿/*
   获取图片灰度值直方图的 compute shader
 */
+#pragma kernel HistogramClear
+#pragma kernel Histogram
+
 #pragma warning(disable : 3568)
 #pragma exclude_renderers gles gles3 d3d11_9x
 #pragma enable_d3d11_debug_symbols
 
 #include "Packages/com.unity.postprocessing/PostProcessing/Shaders/StdLib.hlsl"
 
-// Don't forget to update 'LogHistogram.cs' if you change these values !
+// Don't forget to update 'ScratchImage.cs' if you change these values !
 #define HISTOGRAM_BINS          128
 #define HISTOGRAM_TEXELS        HISTOGRAM_BINS / 4
 
@@ -25,17 +28,15 @@
     #define HISTOGRAM_REDUCTION_ALT_PATH    0
 #endif
 
-RWStructuredBuffer<uint> _HistogramBuffer;
-Texture2D<float4> _Tex;
-SamplerState sampler_LinearClamp;
+RWStructuredBuffer<uint>    _HistogramBuffer;
+Texture2D<float4>           _Tex;
+SamplerState                sampler_LinearClamp;
 
 CBUFFER_START(Params)
-    float2 _TexScaledSize; // x: width, y: height
+    float2 _TexScaledSize; // 经过缩放以与dispatch数量相匹配的贴图大小， x: width, y: height
 CBUFFER_END
 
 groupshared uint gs_histogram[HISTOGRAM_BINS];
-
-#pragma kernel HistogramClear
 
 [numthreads(HISTOGRAM_THREAD_X, 1, 1)]
 void HistogramClear(uint dispatchThreadId : SV_DispatchThreadID)
@@ -43,8 +44,6 @@ void HistogramClear(uint dispatchThreadId : SV_DispatchThreadID)
     if (dispatchThreadId < HISTOGRAM_BINS)
         _HistogramBuffer[dispatchThreadId] = 0u;
 }
-
-#pragma kernel Histogram
 
 [numthreads(HISTOGRAM_THREAD_X, HISTOGRAM_THREAD_Y, 1)]
 void Histogram(uint2 dispatchThreadId : SV_DispatchThreadID, uint2 groupThreadId : SV_GroupThreadID)
