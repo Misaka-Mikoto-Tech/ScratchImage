@@ -18,9 +18,14 @@ public class ScratchImage : MonoBehaviour
 {
     public struct StatData
     {
-        public int      nonZeroCount; // 非0值数量
-        public float    pixelValSum; // 像素值总和
+        public float    fillPercent;  // 填充百分比（非0值）
+        public float    avgVal;       // 平均值
     }
+
+    /// <summary>
+    /// 直方图桶的数量，必须与shader中定义的一致, 且小于256
+    /// </summary>
+    public const int HISTOGRAM_BINS = 128;
 
     public Camera uiCamera;
     /// <summary>
@@ -58,16 +63,18 @@ public class ScratchImage : MonoBehaviour
     /// </summary>
     public Material paintMaterial;
     /// <summary>
-    /// 用来统计刮开像素信息的shader
+    /// 用来生成直方图数据的shader
     /// </summary>
-    public ComputeShader statShader;
+    public ComputeShader histogramShader;
 
     /// <summary>
-    /// 刮开的像素统计信息
+    /// 直方图数据
     /// </summary>
-    private StatData[]      _statData;
-    private ComputeBuffer   _computeBuffer;
-    private int             _statShaderKernel;
+    private uint[]          _histogramData;
+    private ComputeBuffer   _histogramBuffer;
+    private int             _clearShaderKrnl;
+    private int             _histogramShaderKrnl;
+    private Vector2Int      _histogramShaderGroupSize;
 
     private RenderTexture   _rt;
     private CommandBuffer   _cb;
@@ -104,18 +111,39 @@ public class ScratchImage : MonoBehaviour
     /// <returns></returns>
     public StatData GetStatData()
     {
-        if (_statShaderKernel == -1)
+        if (_histogramShaderKrnl == -1)
         {
             Debug.LogError("invalid compute shader");
             return new StatData();
         }
 
-        _statData[0] = new StatData() { nonZeroCount = 0, pixelValSum = 0 };
-        _computeBuffer.SetData(_statData);
-        statShader.Dispatch(_statShaderKernel, _rt.width / 8, _rt.height / 8, 1);
+        histogramShader.Dispatch(_clearShaderKrnl, HISTOGRAM_BINS / _histogramShaderGroupSize.x, 1, 1);
 
-        _computeBuffer.GetData(_statData);
-        return _statData[0];
+        int dispatchX = _rt.width / _histogramShaderGroupSize.x;
+        int dispatchY = _rt.height / _histogramShaderGroupSize.y;
+        histogramShader.Dispatch(_histogramShaderKrnl, dispatchX, dispatchY, 1);
+
+        // AsyncGPUReadback.Request does supported at OpenglES
+        _histogramBuffer.GetData(_histogramData);
+
+        int dispatchWidth = dispatchX * _histogramShaderGroupSize.x;
+        int dispatchHeight = dispatchY * _histogramShaderGroupSize.y;
+        int dispatchCount = dispatchWidth * dispatchHeight;
+
+        StatData ret = new StatData();
+        ret.fillPercent = 1.0f - _histogramData[0] / (dispatchCount * 1.0f); // 非0值比例
+
+        float sum = 0;
+        float binScale = (256 / HISTOGRAM_BINS);
+        for (int i = 0; i < HISTOGRAM_BINS; i++)
+        {
+            int count = (int)_histogramData[i];
+            sum += i * binScale * count;
+        }
+        ret.avgVal = sum / dispatchCount;
+        // 由于桶的数量小于256，shader最大只统计到 127 * 2 = 254, 无法显示255的数据，因此此处把结果给缩放一下
+        ret.avgVal *= 255.0f / ((HISTOGRAM_BINS - 1) * binScale);
+        return ret;
     }
 
     void Start()
@@ -135,8 +163,8 @@ public class ScratchImage : MonoBehaviour
         if (_cb != null)
             _cb.Dispose();
 
-        if (_computeBuffer != null)
-            _computeBuffer.Release();
+        if (_histogramBuffer != null)
+            _histogramBuffer.Release();
     }
 
     private void Update()
@@ -239,19 +267,33 @@ public class ScratchImage : MonoBehaviour
 
         _cb = new CommandBuffer() { name = "PaintOncb" };
 
-        // setup compute shader
-        _statShaderKernel = -1;
-        if (statShader != null)
+        // setup histogram compute shader
+        _clearShaderKrnl = -1;
+        if (histogramShader != null)
         {
-            _computeBuffer = new ComputeBuffer(1, 8);
-            _statData = new StatData[1];
+            _histogramBuffer = new ComputeBuffer(HISTOGRAM_BINS, 4);
+            _histogramData = new uint[HISTOGRAM_BINS];
 
-            _statShaderKernel = statShader.FindKernel("CSMain");
-            statShader.SetTexture(_statShaderKernel, "inputTexture", _rt);
-            statShader.SetInt("texSize", _rt.width * _rt.height);
-            statShader.SetBuffer(_statShaderKernel, "Result", _computeBuffer);
+            _clearShaderKrnl = histogramShader.FindKernel("HistogramClear");
+            histogramShader.SetBuffer(_clearShaderKrnl, "_HistogramBuffer", _histogramBuffer);
+
+            _histogramShaderKrnl = histogramShader.FindKernel("Histogram");
+            histogramShader.SetTexture(_histogramShaderKrnl, "_Tex", _rt);
+            histogramShader.SetBuffer(_histogramShaderKrnl, "_HistogramBuffer", _histogramBuffer);
+
+            // setup _TexScaledSize
+            {
+                uint x, y, z;
+                histogramShader.GetKernelThreadGroupSizes(_histogramShaderKrnl, out x, out y, out z);
+                uint dispatchWidth = (uint)(_rt.width / x * x);
+                uint dispatchHeight = (uint)(_rt.height / y * y);
+
+                _histogramShaderGroupSize = new Vector2Int((int)x, (int)y);
+
+                // 要求shader执行的宽高小于真实的纹理尺寸，以避免uv溢出
+                histogramShader.SetVector("_TexScaledSize", new Vector2(dispatchWidth, dispatchHeight));
+            }
         }
-        
     }
 
     private void SetupPaintContext(bool clearRT)

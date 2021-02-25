@@ -8,7 +8,7 @@
 #include "Packages/com.unity.postprocessing/PostProcessing/Shaders/StdLib.hlsl"
 
 // Don't forget to update 'LogHistogram.cs' if you change these values !
-#define HISTOGRAM_BINS          5
+#define HISTOGRAM_BINS          128
 #define HISTOGRAM_TEXELS        HISTOGRAM_BINS / 4
 
 #if SHADER_API_GLES3 || SHADER_API_METAL
@@ -18,19 +18,19 @@
     #define HISTOGRAM_REDUCTION_THREAD_Y    8
     #define HISTOGRAM_REDUCTION_ALT_PATH    1
 #else
-    #define HISTOGRAM_THREAD_X              2
-    #define HISTOGRAM_THREAD_Y              2
+    #define HISTOGRAM_THREAD_X              16
+    #define HISTOGRAM_THREAD_Y              16
     #define HISTOGRAM_REDUCTION_THREAD_X    HISTOGRAM_THREAD_X
     #define HISTOGRAM_REDUCTION_THREAD_Y    HISTOGRAM_BINS / HISTOGRAM_THREAD_Y
     #define HISTOGRAM_REDUCTION_ALT_PATH    0
 #endif
 
 RWStructuredBuffer<uint> _HistogramBuffer;
-Texture2D<float4> _Source;
+Texture2D<float4> _Tex;
 SamplerState sampler_LinearClamp;
 
 CBUFFER_START(Params)
-    float2 _TexSize; // x: width, y: height
+    float2 _TexScaledSize; // x: width, y: height
 CBUFFER_END
 
 groupshared uint gs_histogram[HISTOGRAM_BINS];
@@ -51,22 +51,18 @@ void Histogram(uint2 dispatchThreadId : SV_DispatchThreadID, uint2 groupThreadId
 {
     const uint localThreadId = groupThreadId.y * HISTOGRAM_THREAD_X + groupThreadId.x;
 
-/*
-    localThreadId 的最大值必须大于等于 HISTOGRAM_BINS，否则会赋值不完全
-    TODO 如果图片尺寸不是 group x, y 的整数倍怎么办
-*/
     if (localThreadId < HISTOGRAM_BINS)
     {
         gs_histogram[localThreadId] = 0u;
     }
 
     float2 ipos = float2(dispatchThreadId);
-    float2 uvpos = ipos / _TexSize;
-    float3 color = _Source.SampleLevel(sampler_LinearClamp, uvpos, 0.0).xyz;
-    uint sum = (color.r + color.g + color.b) * 255;
+    float2 uvpos = ipos / _TexScaledSize.xy;
+    float3 color = _Tex.SampleLevel(sampler_LinearClamp, uvpos, 0.0).xyz;
+    uint colorIdx = color.r * (HISTOGRAM_BINS - 1); // mask图为单通道，因此只读取r通道
 
     GroupMemoryBarrierWithGroupSync();
-    InterlockedAdd(gs_histogram[localThreadId], sum);
+    InterlockedAdd(gs_histogram[colorIdx], 1);
     GroupMemoryBarrierWithGroupSync();
 
     if (localThreadId < HISTOGRAM_BINS)
