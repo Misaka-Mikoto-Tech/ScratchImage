@@ -1,6 +1,6 @@
 /*
  * Author:Misaka-Mikoto
- * Date: 2020-02-08
+ * Date: 2021-02-08
  * Url:https://github.com/Misaka-Mikoto-Tech/ScratchImage
  */
 
@@ -26,6 +26,14 @@ public class ScratchImage : MonoBehaviour
     /// 直方图桶的数量，必须与shader中定义的一致, 且小于256
     /// </summary>
     public const int HISTOGRAM_BINS = 128;
+    /// <summary>
+    /// 用来控制透明度的RT相比Image尺寸的比例，值越小性能越高，但是精度和效果也越差
+    /// </summary>
+    public const float ALPHA_RT_SCALE = 0.4f;
+    /// <summary>
+    /// 每一批次的实例数量上限（太多有些设备会有异常）
+    /// </summary>
+    public const int INSTANCE_COUNT_PER_BATCH = 200;
 
     public Camera uiCamera;
     /// <summary>
@@ -84,7 +92,6 @@ public class ScratchImage : MonoBehaviour
     
     private Mesh            _quad;
     private Matrix4x4       _matrixProj;
-    private int             _instanceCountPerBatch = 200; // 每一批次的实例数量上限（太多有些设备会有异常）
     private Matrix4x4[]     _arrInstancingMatrixs;
 
     private int             _propIDMainTex;
@@ -200,7 +207,7 @@ public class ScratchImage : MonoBehaviour
 
         while (offset <= len)
         {
-            if (instCount >= _instanceCountPerBatch)
+            if (instCount >= INSTANCE_COUNT_PER_BATCH)
             {
                 _cb.DrawMeshInstanced(_quad, 0, paintMaterial, 0, _arrInstancingMatrixs, instCount);
                 instCount = 0;
@@ -250,12 +257,12 @@ public class ScratchImage : MonoBehaviour
         _maskSize = maskImage.rectTransform.rect.size;
         //Debug.LogFormat("mask image size:{0}*{1}", maskSize.x, maskSize.y);
 
-        _rt = new RenderTexture((int)_maskSize.x, (int)_maskSize.y, 0, RenderTextureFormat.R8, 0);
+        _rt = new RenderTexture((int)(_maskSize.x * ALPHA_RT_SCALE), (int)(_maskSize.y * ALPHA_RT_SCALE), 0, RenderTextureFormat.R8, 0);
         _rt.antiAliasing = 2;
         _rt.autoGenerateMips = false;
 
-        _arrInstancingMatrixs = new Matrix4x4[_instanceCountPerBatch];
-        _matrixProj = Matrix4x4.Ortho(0, _rt.width, 0, _rt.height, -1f, 1f);
+        _arrInstancingMatrixs = new Matrix4x4[INSTANCE_COUNT_PER_BATCH];
+        _matrixProj = Matrix4x4.Ortho(0, _maskSize.x, 0, _maskSize.y, -1f, 1f);
 
         _propIDMainTex = Shader.PropertyToID("_MainTex");
         _propIDBrushAlpha = Shader.PropertyToID("_BrushAlpha");

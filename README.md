@@ -10,7 +10,7 @@
 
 #### 性能
 * 使用GPUInstancing和CommandBuffer绘制，绝大多数情况下性能可以接受。
-* 在某些设备上有兼容性问题时可以通过修改每个批次的实例数量 (`ScratchImage._instanceCountPerBatch`) 来改善
+* 在某些设备上有兼容性问题时可以通过修改每个批次的实例数量 (`ScratchImage.INSTANCE_COUNT_PER_BATCH`) 来改善
 * 统计功能通过ComputeShader计算直方图来实现，可能比较浪费性能，不需要时可以关闭此特性。
 
 #### 预览 
